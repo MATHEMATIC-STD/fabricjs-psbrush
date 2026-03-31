@@ -1,4 +1,4 @@
-/// <reference types="fabric" />
+import { Point } from 'fabric';
 
 /*!
  * Copyright (c) 2017 Vladimir Agafonkin (rewrite by Jun Kato in TypeScript for PSBrush implementation)
@@ -8,7 +8,7 @@
  * @license BSD-2-Clause
  */
 
-class Simplify<P extends fabric.Point> {
+class Simplify<P extends Point> {
   public set tolerance(tolerance: number) {
     if (typeof tolerance !== "number") {
       tolerance = 1;
@@ -57,9 +57,10 @@ class Simplify<P extends fabric.Point> {
 
   // basic distance-based simplification
   public simplifyRadialDistance(points: P[]) {
+    if (points.length === 0) return [];
     let prevPoint = points[0],
       newPoints = [prevPoint],
-      point: P;
+      point: P = prevPoint;
 
     for (let i = 1, len = points.length; i < len; i++) {
       point = points[i];
@@ -79,8 +80,9 @@ class Simplify<P extends fabric.Point> {
 
   // simplification using optimized Douglas-Peucker algorithm with recursion elimination
   public simplifyDouglasPeucker(points: P[]) {
-    let len = points.length,
-      MarkerArray = typeof Uint8Array !== "undefined" ? Uint8Array : Array,
+    let len = points.length;
+    if (len === 0) return [];
+    let MarkerArray = typeof Uint8Array !== "undefined" ? Uint8Array : Array,
       markers = new MarkerArray(len),
       first = 0,
       last = len - 1,
@@ -89,7 +91,7 @@ class Simplify<P extends fabric.Point> {
       i: number,
       maxSqDist: number,
       sqDist: number,
-      index: number;
+      index: number = 0;
 
     markers[first] = markers[last] = 1;
 
@@ -129,6 +131,7 @@ class Simplify<P extends fabric.Point> {
 
   // both algorithms combined for awesome performance
   public do(points: P[], highestQuality: boolean) {
+    if (points.length === 0) return [];
     points = highestQuality ? points : this.simplifyRadialDistance(points);
     points = this.simplifyDouglasPeucker(points);
     return points;

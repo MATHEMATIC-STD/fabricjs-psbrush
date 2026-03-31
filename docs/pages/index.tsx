@@ -6,7 +6,7 @@ const basePath = process.env.BASE_PATH.replace(/\/$/, "");
 
 const Index: NextPage = () => {
   // create a canvas element that never gets reloaded
-  const ref = useRef<HTMLCanvasElement>();
+  const ref = useRef<HTMLCanvasElement>(null);
   const canvas = useMemo(
     () => <canvas ref={ref} width="720" height="480" />,
     []
@@ -163,7 +163,7 @@ const Index: NextPage = () => {
           </div>
         </div>
       </footer>
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/3.6.2/fabric.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/7.2.0/index.min.js"></script>
       <script src={`${basePath}/lib.js`}></script>
       <script src={`${basePath}/index.js`}></script>
     </>

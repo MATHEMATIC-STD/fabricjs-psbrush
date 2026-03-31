@@ -4,7 +4,7 @@ import Head from "next/head";
 
 const Index: NextPage = () => {
   // create a canvas element that never gets reloaded
-  const ref = useRef<HTMLCanvasElement>();
+  const ref = useRef<HTMLCanvasElement>(null);
   const canvas = useMemo(
     () => <canvas ref={ref} width="720" height="480" />,
     []
@@ -16,11 +16,11 @@ const Index: NextPage = () => {
       return;
     }
 
-    import("fabric").then(({ fabric }) => {
+    import("fabric").then(({ Canvas }) => {
       const el = ref.current;
 
       // Create a Fabric.js canvas
-      let canvas = new fabric.Canvas(el, {
+      let canvas = new Canvas(el, {
         isDrawingMode: true,
         enablePointerEvents: true
       } as any);
@@ -167,7 +167,7 @@ const Index: NextPage = () => {
         <div className="ui container">
           <div className="ui horizontal divided list">
             <div className="item">
-              &copy; <a href="//research.archinc.jp">Arch Inc.</a> 2020-2022
+              &copy; <a href="//research.archinc.jp : fabricjs-psbrush">Arch Inc.</a> 2020-2022
             </div>
             <div className="item">
               <a href="https://github.com/arch-inc/fabricjs-psbrush">

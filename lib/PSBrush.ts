@@ -1,20 +1,18 @@
-/// <reference types="fabric" />
 /*!
  * Copyright (c) 2020-2022 Arch Inc. (Jun Kato, Kenta Hara)
  *
  * fabricjs-psbrush, a lightweight pressure-sensitive brush implementation for Fabric.js
  * @license MIT
  */
-const fabricjs: typeof fabric =
-  typeof fabric === "undefined" ? require("fabric").fabric : fabric;
-
-import PSSimplify from "./PSSimplify";
-import { FabricEvent, FabricPointer, FabricPointerEvent } from "./utils";
-import PressureManager, { PressureManagerIface } from "./PressureManager";
-import PSStroke, { PSStrokeIface } from "./PSStroke";
+import {BaseBrush, Canvas, classRegistry, Color, Point, Shadow} from 'fabric';
+import PressureManager, {PressureManagerIface} from "./PressureManager";
 import PSPoint from "./PSPoint";
+import PSSimplify from "./PSSimplify";
+import PSStroke from "./PSStroke";
+import {FabricPointerEvent} from "./utils";
 
-export interface PSBrushIface extends fabric.BaseBrush {
+
+export interface PSBrushIface extends BaseBrush {
   pressureManager: PressureManagerIface;
   pressureCoeff: number;
   simplifyTolerance: number;
@@ -23,53 +21,73 @@ export interface PSBrushIface extends fabric.BaseBrush {
   opacity: number;
   disableTouch: boolean;
   readonly currentStartTime: number;
-  onMouseDown(pointer: FabricPointer | FabricEvent, ev: FabricEvent): void;
-  onMouseMove(pointer: FabricPointer | FabricEvent, ev: FabricEvent): void;
-  onMouseUp(ev?: FabricEvent): void;
+
+  onMouseDown(pointer: Point, options: { e: FabricPointerEvent }): void;
+
+  onMouseMove(pointer: Point, options: { e: FabricPointerEvent }): void;
+
+  onMouseUp(options: { e: FabricPointerEvent }): void;
 }
 
-const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
-  simplify: null,
-  pressureManager: null,
-  pressureCoeff: 100,
-  simplifyTolerance: 0,
-  simplifyHighestQuality: false,
-  pressureIgnoranceOnStart: -1,
-  opacity: 1,
-  disableTouch: false,
-  currentStartTime: null,
+
+/**
+ * PSBrush class
+ * @class PSBrush
+ * @extends BaseBrush
+ */
+class PSBrush extends BaseBrush implements PSBrushIface {
+  static type = 'PSBrush';
+  public simplify = new PSSimplify();
+  public pressureManager: PressureManagerIface;
+  public pressureCoeff = 100;
+  public simplifyTolerance = 0;
+  public simplifyHighestQuality = false;
+  public pressureIgnoranceOnStart = -1;
+  public opacity = 1;
+  public disableTouch = false;
+  public currentStartTime: number = null;
+
+  protected _points: PSPoint[] = [];
+  protected oldEnd?: PSPoint;
+  protected _needsFullRender: boolean = false;
 
   /**
    * Constructor
-   * @param {fabricjs.Canvas} canvas
+   * @param {Canvas} canvas
    * @return {PSBrush} Instance of a pencil brush
    */
-  initialize: function(canvas) {
-    this.simplify = new PSSimplify();
+  constructor(canvas: Canvas) {
+    super(canvas);
     this.pressureManager = new PressureManager(this);
-    this.canvas = canvas;
     this._points = [];
-  },
+  }
+
+  get type(): "PSBrush" {
+    return "PSBrush";
+  }
+  set type(v: any) {
+  }
 
   /**
    * Invoked inside on mouse down and mouse move
-   * @param {Object} pointer
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {PSPoint} p1
+   * @param {PSPoint} p2
    */
-  _drawSegment: function(ctx, p1, p2) {
-    var midPoint = p1.midPointFrom(p2);
+  _drawSegment(ctx: CanvasRenderingContext2D, p1: PSPoint, p2: PSPoint) {
+    const midPoint = p1.midPointFrom(p2);
     ctx.lineWidth = p1.pressure * this.width;
     ctx.quadraticCurveTo(p1.x, p1.y, midPoint.x, midPoint.y);
     return midPoint;
-  },
+  }
 
   /**
    * Inovoked on mouse down
-   * @param {Object} pointer
-   * @param {Object} ev
+   * @param {Point} pointer
+   * @param {Object} options
    */
-  onMouseDown: function(pointer: FabricPointer | FabricEvent, ev: FabricEvent) {
-    const p = ev ? ev.pointer : pointer;
-    const e: FabricPointerEvent = ev ? ev.e : pointer["e"] || null;
+  onMouseDown(pointer: Point, options: { e: FabricPointerEvent }) {
+    const e = options.e;
     if (
       this.disableTouch &&
       e &&
@@ -78,21 +96,20 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
       return;
     }
 
-    this._prepareForDrawing(p, e);
+    this._prepareForDrawing(pointer, e);
     // capture coordinates immediately
     // this allows to draw dots (when movement never occurs)
-    this._captureDrawingPath(p, e);
+    this._captureDrawingPath(pointer, e);
     this._render();
-  },
+  }
 
   /**
    * Inovoked on mouse move
-   * @param {Object} pointer
-   * @param {Object} ev
+   * @param {Point} pointer
+   * @param {Object} options
    */
-  onMouseMove: function(pointer: FabricPointer | FabricEvent, ev: FabricEvent) {
-    const p = ev ? ev.pointer : pointer;
-    const e = ev ? ev.e : pointer["e"] || null;
+  onMouseMove(pointer: Point, options: { e: FabricPointerEvent }) {
+    const e = options.e;
     if (
       this.disableTouch &&
       e &&
@@ -101,8 +118,8 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
       return;
     }
 
-    if (this._captureDrawingPath(p, e) && this._points.length > 1) {
-      if (this.needsFullRender) {
+    if (this._captureDrawingPath(pointer, e) && this._points.length > 1) {
+      if (this._needsFullRender) {
         // redraw curve
         // clear top canvas
         this.canvas.clearContext(this.canvas.contextTop);
@@ -121,21 +138,20 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
         this.oldEnd = this._drawSegment(
           ctx,
           points[length - 2],
-          points[length - 1],
-          true
+          points[length - 1]
         );
         ctx.stroke();
         ctx.restore();
       }
     }
-  },
+  }
 
   /**
    * Invoked on mouse up
-   * @param {Object} ev
+   * @param {Object} options
    */
-  onMouseUp: function(ev?: FabricEvent) {
-    const e = ev?.e || null;
+  onMouseUp(options: { e: FabricPointerEvent }) {
+    const e = options.e;
     if (
       this.disableTouch &&
       e &&
@@ -147,14 +163,14 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     this.oldEnd = undefined;
     this._finalizeAndAddPath();
     this.pressureManager.onMouseUp();
-  },
+  }
 
   /**
    * @private
-   * @param {Object} pointer Actual mouse position related to the canvas.
+   * @param {Point} pointer Actual mouse position related to the canvas.
    * @param {Object} ev
    */
-  _prepareForDrawing: function(pointer: FabricPointer, ev: FabricPointerEvent) {
+  _prepareForDrawing(pointer: Point, ev: FabricPointerEvent) {
     const pressure = this.pressureManager.onMouseDown(ev);
     const p = new PSPoint(pointer.x, pointer.y, pressure);
 
@@ -163,13 +179,13 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     this.canvas.contextTop.moveTo(p.x, p.y);
 
     this.currentStartTime = Date.now();
-  },
+  }
 
   /**
    * @private
-   * @param {fabricjs.Point} point Point to be added to points array
+   * @param {PSPoint} point Point to be added to points array
    */
-  _addPoint: function(point) {
+  _addPoint(point: PSPoint) {
     if (
       this._points.length > 1 &&
       point.eq(this._points[this._points.length - 1])
@@ -178,35 +194,36 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     }
     this._points.push(point);
     return true;
-  },
+  }
 
   /**
    * Clear points array and set contextTop canvas style.
    * @private
    */
-  _reset: function() {
+  _reset() {
     this._points.length = 0;
-    this._setBrushStyles();
-    var color = new fabricjs.Color(this.color);
-    this.needsFullRender = color.getAlpha() < 1;
+    this._setBrushStyles(this.canvas.contextTop);
+    const color = new Color(this.color);
+    this._needsFullRender = color.getAlpha() < 1;
     this._setShadow();
-  },
+  }
 
   /**
    * @private
-   * @param {Object} pointer Actual mouse position related to the canvas.
+   * @param {Point} pointer Actual mouse position related to the canvas.
    * @param {Object} ev
    */
-  _captureDrawingPath: function(
-    pointer: FabricPointer,
-    ev: FabricPointerEvent
-  ) {
+  _captureDrawingPath(pointer: Point, ev: FabricPointerEvent) {
     const pressure = this.pressureManager.onMouseMove(ev, this._points);
     const pointerPoint = new PSPoint(pointer.x, pointer.y, pressure);
     return this._addPoint(pointerPoint);
-  },
+  }
 
-  _redrawSegments: function(points) {
+  /**
+   * @private
+   * @param {Array<PSPoint>} points
+   */
+  _redrawSegments(points: PSPoint[]) {
     const ctx = this.canvas.contextTop;
     this._saveAndTransform(ctx);
     if (this.oldEnd) {
@@ -216,22 +233,20 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     ctx.moveTo(p.x, p.y);
     ctx.beginPath();
     this._points.forEach(p2 => {
-      this.oldEnd = this._drawSegment(ctx, p, p2, true);
+      this.oldEnd = this._drawSegment(ctx, p, p2);
       p = p2;
     });
     ctx.stroke();
     ctx.restore();
-  },
+  }
 
   /**
    * Draw a smooth path on the topCanvas using quadraticCurveTo
    * @private
    */
-  _render: function() {
-    var ctx = this.canvas.contextTop,
-      i,
-      len,
-      p1 = this._points[0],
+  _render() {
+    const ctx = this.canvas.contextTop;
+    let p1 = this._points[0],
       p2 = this._points[1],
       mid = p1;
 
@@ -242,7 +257,7 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     //then we should be drawing a dot. A path isn't drawn between two identical dots
     //that's why we set them apart a bit
     if (this._points.length === 2 && p1.x === p2.x && p1.y === p2.y) {
-      var width = (p1.pressure * this.width) / 1000;
+      const width = (p1.pressure * this.width) / 1000;
       p1 = new PSPoint(p1.x, p1.y, p1.pressure);
       p2 = new PSPoint(p2.x, p2.y, p2.pressure);
       p1.x -= width;
@@ -254,7 +269,7 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     const alpha = ctx.globalAlpha;
     ctx.globalCompositeOperation = "destination-atop";
     ctx.globalAlpha = this.opacity;
-    for (i = 1, len = this._points.length; i < len; i++) {
+    for (let i = 1, len = this._points.length; i < len; i++) {
       ctx.beginPath();
       ctx.moveTo(mid.x, mid.y);
       // we pick the point between pi + 1 & pi + 2 as the
@@ -268,18 +283,17 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     ctx.restore();
     ctx.globalCompositeOperation = compositeOperation;
     ctx.globalAlpha = alpha;
-  },
+  }
 
   /**
    * Converts points to SVG path
-   * @param {Array} points Array of points
-   * @return {String} SVG path
+   * @param {Array<PSPoint>} points Array of points
+   * @return {Array<string>} SVG path
    */
-  convertPointsToSVGPath: function(points: PSPoint[]) {
-    var path = [],
-      i,
-      width = this.width / 1000,
-      p1 = new PSPoint(points[0].x, points[0].y, points[0].pressure),
+  convertPointsToSVGPath(points: PSPoint[]) {
+    const path = [],
+      width = this.width / 1000;
+    let p1 = new PSPoint(points[0].x, points[0].y, points[0].pressure),
       p2 = new PSPoint(points[1].x, points[1].y, points[1].pressure),
       mid = p1,
       len = points.length,
@@ -291,7 +305,7 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
       multSignX = points[2].x < p2.x ? -1 : points[2].x === p2.x ? 0 : 1;
       multSignY = points[2].y < p2.y ? -1 : points[2].y === p2.y ? 0 : 1;
     }
-    for (i = 1; i < len; i++) {
+    for (let i = 1; i < len; i++) {
       path.push(
         "M ",
         mid.x - multSignX * width,
@@ -313,26 +327,21 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     }
     if (manyPoints) {
       multSignX =
-        p1.x > points[i - 2].x ? 1 : p1.x === points[i - 2].x ? 0 : -1;
+        p1.x > points[len - 2].x ? 1 : p1.x === points[len - 2].x ? 0 : -1;
       multSignY =
-        p1.y > points[i - 2].y ? 1 : p1.y === points[i - 2].y ? 0 : -1;
+        p1.y > points[len - 2].y ? 1 : p1.y === points[len - 2].y ? 0 : -1;
     }
     path.push("L ", p1.x + multSignX * width, " ", p1.y + multSignY * width);
     return path;
-  },
+  }
 
   /**
    * Creates PSStroke object to add on canvas
    * @param {Array<PSPoint>} points Path data
    * @return {PSStroke} Path to add on canvas
    */
-  createPSStroke: function(points: PSPoint[]) {
-    // debug statement:
-    // console.log(`raw path data (${typeof points}):`, points);
-    // console.log(`path data (${typeof pathData}):`, pathData);
-    // console.log(`parsed path data (${typeof pArray}):`, pArray);
-
-    var path = new PSStroke(points, {
+  createPSStroke(points: PSPoint[]) {
+    const path = new PSStroke(points, {
       fill: null,
       stroke: this.color,
       strokeWidth: this.width,
@@ -342,7 +351,7 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
       strokeDashArray: this.strokeDashArray
     });
 
-    var position = new fabricjs.Point(
+    let position = new Point(
       path.left + path.width / 2,
       path.top + path.height / 2
     );
@@ -356,36 +365,33 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
     path.top = position.y;
     path.left = position.x;
     if (this.shadow) {
-      this.shadow.affectStroke = true;
-      path.shadow = new fabric.Shadow(this.shadow);
+      (this.shadow as any).affectStroke = true;
+      path.shadow = new Shadow(this.shadow);
     }
 
     return path;
-  },
+  }
 
   /**
    * On mouseup after drawing the path on contextTop canvas
    * we use the points captured to create an new fabric path object
    * and add it to the fabric canvas.
    */
-  _finalizeAndAddPath: function() {
-    var ctx = this.canvas.contextTop;
+  _finalizeAndAddPath() {
+    const ctx = this.canvas.contextTop;
     ctx.closePath();
-
-    // debug statement:
-    // console.log("raw path data:", this._points, simplify);
 
     // simplify the path
     if (this.simplifyTolerance > 0) {
       this.simplify.pressureCoeff = this.pressureCoeff;
       this.simplify.tolerance = this.simplifyTolerance;
-      this._points = (<PSSimplify>this.simplify).do(
+      this._points = (this.simplify as PSSimplify).do(
         this._points,
         this.simplifyHighestQuality
       );
     }
 
-    var pathData = this.convertPointsToSVGPath(this._points).join("");
+    const pathData = this.convertPointsToSVGPath(this._points).join("");
     if (pathData === "M 0 0 Q 0 0 0 0 L 0 0") {
       // do not create 0 width/height paths, as they are
       // rendered inconsistently across browsers
@@ -395,30 +401,20 @@ const PSBrushImpl = <any>fabricjs.util.createClass(fabricjs.BaseBrush, {
       return;
     }
 
-    const path = this.createPSStroke(this._points) as PSStrokeIface;
+    const path = this.createPSStroke(this._points) as any;
     path.opacity = this.opacity;
     path["startTime"] = this.currentStartTime;
     path["endTime"] = Date.now();
     this.canvas.clearContext(this.canvas.contextTop);
     this.canvas.add(path);
-    // this.canvas.renderAll();
     path.setCoords();
     this._resetShadow();
-    // this.canvas.clearContext(this.canvas.contextTop);
 
     // fire event 'path' created
-    this.canvas.fire("path:created", { path });
+    this.canvas.fire("path:created", {path});
   }
-});
+}
 
-/**
- * PSBrush class
- * @class fabricjs.PSBrush
- * @extends fabricjs.BaseBrush
- */
-const PSBrush: {
-  new (canvas: fabric.StaticCanvas): PSBrushIface;
-} = PSBrushImpl;
 
-(fabricjs as any).PSBrush = PSBrush;
+classRegistry.setClass(PSBrush, 'PSBrush');
 export default PSBrush;

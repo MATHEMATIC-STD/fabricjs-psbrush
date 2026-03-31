@@ -1,3 +1,4 @@
+import { FabricObject } from 'fabric';
 import PSPoint from "./PSPoint";
 import { PSStrokeIface } from "./PSStroke";
 
@@ -14,9 +15,9 @@ export interface FabricPointer {
 }
 
 export function isPSStroke(
-  object: fabric.Object | fabric.ICollection<any>
+  object: FabricObject | any
 ): object is PSStrokeIface {
-  return object && object["type"] === "PSStroke";
+  return object && object.get('type') === "PSStroke";
 }
 
 export function isPSPoint(object: any): object is PSPoint {
@@ -28,16 +29,16 @@ export function getPressure(
   fallbackValue: number = 0.5
 ) {
   // TouchEvent
-  if (ev["touches"] && ev["touches"].length > 0) {
-    return (<TouchEvent>ev).touches[0].force;
+  if ((ev as any)["touches"] && (ev as any)["touches"].length > 0) {
+    return (ev as TouchEvent).touches[0].force;
   }
   // MouseEvent, PointerEvent (ev.pointerType: "mouse")
-  if (ev["pointerType"] === "mouse" || typeof ev["pressure"] !== "number") {
+  if ((ev as any)["pointerType"] === "mouse" || typeof (ev as PointerEvent).pressure !== "number") {
     return fallbackValue;
   }
   // PointerEvent (ev.pointerType: "pen" | "touch")
-  if (ev["pointerType"] === "touch" && (<PointerEvent>ev).pressure === 0) {
+  if ((ev as any)["pointerType"] === "touch" && (ev as PointerEvent).pressure === 0) {
     return fallbackValue;
   }
-  return (<PointerEvent>ev).pressure;
+  return (ev as PointerEvent).pressure;
 }

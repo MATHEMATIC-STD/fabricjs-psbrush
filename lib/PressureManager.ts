@@ -1,6 +1,4 @@
-const fabricjs: typeof fabric =
-  typeof fabric === "undefined" ? require("fabric").fabric : fabric;
-
+import { classRegistry } from 'fabric';
 import { PSBrushIface } from "./PSBrush";
 import PSPoint from "./PSPoint";
 import { getPressure, FabricPointerEvent } from "./utils";
@@ -59,5 +57,7 @@ class PressureManager implements PressureManagerIface {
   }
 }
 
-(fabricjs as any).PressureManager = PressureManager;
+// In Fabric 7, we don't necessarily need to attach to a global namespace
+// but we can register it if needed.
+// (fabric as any).PressureManager = PressureManager;
 export default PressureManager;

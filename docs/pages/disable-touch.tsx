@@ -4,7 +4,7 @@ import Head from "next/head";
 
 const Index: NextPage = () => {
   // create a canvas element that never gets reloaded
-  const ref = useRef<HTMLCanvasElement>();
+  const ref = useRef<HTMLCanvasElement>(null);
   const canvas = useMemo(
     () => <canvas ref={ref} width="720" height="480" />,
     []
@@ -16,11 +16,11 @@ const Index: NextPage = () => {
       return;
     }
 
-    import("fabric").then(({ fabric }) => {
+    import("fabric").then(({ Canvas }) => {
       const el = ref.current;
 
       // Create a Fabric.js canvas
-      let canvas = new fabric.Canvas(el, {
+      let canvas = new Canvas(el, {
         isDrawingMode: true,
         enablePointerEvents: true
       } as any);
