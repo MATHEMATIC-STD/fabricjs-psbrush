@@ -1,8 +1,18 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
     "declaration": true,
-    "allowUmdGlobalAccess": true
+    "allowUmdGlobalAccess": true,
+    "rootDir": "./lib",
+    "outDir": "./dist",
+    "lib": ["es2020", "dom"],
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["./lib/**/*.ts"]
 }
